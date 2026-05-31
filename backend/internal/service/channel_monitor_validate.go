@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net"
 	"net/url"
 	"strings"
 )
@@ -44,7 +45,7 @@ func validateInterval(sec int) error {
 }
 
 // validateEndpoint 校验 endpoint：
-//   - scheme 强制 https（拒绝 http，避免明文凭证 + 部分 SSRF 利用面）
+//   - scheme 强制 https；仅本机调试端点允许 http://localhost / http://127.0.0.1 / http://[::1]
 //   - 必须为 origin（无 path/query/fragment），防止用户填 https://api.openai.com/v1
 //     导致 joinURL 拼出 /v1/v1/chat/completions
 //   - hostname 不能是 localhost/metadata 等已知元数据 hostname
@@ -60,11 +61,13 @@ func validateEndpoint(ep string) error {
 	if err != nil {
 		return ErrChannelMonitorInvalidEndpoint
 	}
-	if u.Scheme != "https" {
-		return ErrChannelMonitorEndpointScheme
-	}
 	if u.Host == "" {
 		return ErrChannelMonitorInvalidEndpoint
+	}
+	hostname := u.Hostname()
+	localHTTP := strings.EqualFold(u.Scheme, "http") && isLocalChannelMonitorHost(hostname)
+	if !strings.EqualFold(u.Scheme, "https") && !localHTTP {
+		return ErrChannelMonitorEndpointScheme
 	}
 	if u.Path != "" && u.Path != "/" {
 		return ErrChannelMonitorEndpointPath
@@ -72,8 +75,10 @@ func validateEndpoint(ep string) error {
 	if u.RawQuery != "" || u.Fragment != "" {
 		return ErrChannelMonitorEndpointPath
 	}
+	if localHTTP {
+		return nil
+	}
 
-	hostname := u.Hostname()
 	ctx, cancel := context.WithTimeout(context.Background(), monitorEndpointResolveTimeout)
 	defer cancel()
 	blocked, err := isPrivateOrLoopbackHost(ctx, hostname)
@@ -92,6 +97,17 @@ func normalizeEndpoint(ep string) string {
 	ep = strings.TrimSpace(ep)
 	ep = strings.TrimRight(ep, "/")
 	return ep
+}
+
+// isLocalChannelMonitorHost returns true for the narrow set of hosts accepted
+// as local development monitor endpoints.
+func isLocalChannelMonitorHost(hostname string) bool {
+	h := strings.ToLower(strings.TrimSpace(hostname))
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && (ip.Equal(net.ParseIP("127.0.0.1")) || ip.Equal(net.IPv6loopback))
 }
 
 // normalizeModels 去除空白、重复模型名。保留输入顺序（map 的迭代顺序无关）。
