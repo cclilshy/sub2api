@@ -17,14 +17,14 @@ VERSION="$(tr -d '\r\n' < backend/cmd/server/VERSION)"
 COMMIT="$(git rev-parse --short HEAD)"
 DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-docker build \
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
   --build-arg VERSION="$VERSION" \
   --build-arg COMMIT="$COMMIT" \
   --build-arg DATE="$DATE" \
   -t cclilshy/sub2api:latest \
+  --push \
   .
-
-docker push cclilshy/sub2api:latest
 ```
 
 ## 更新部署脚本
