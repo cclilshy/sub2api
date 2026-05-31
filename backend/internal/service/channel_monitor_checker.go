@@ -23,6 +23,11 @@ var monitorHTTPClient = newSSRFSafeHTTPClient(monitorRequestTimeout)
 // monitorPingHTTPClient 用于 endpoint origin 的 HEAD ping，超时更短。
 var monitorPingHTTPClient = newSSRFSafeHTTPClient(monitorPingTimeout)
 
+// monitorLocalHTTPClient/monitorLocalPingHTTPClient 仅用于显式本机 HTTP
+// 监控端点；公网端点仍走 SSRF-safe client，保留 DNS rebinding 防护。
+var monitorLocalHTTPClient = &http.Client{Timeout: monitorRequestTimeout}
+var monitorLocalPingHTTPClient = &http.Client{Timeout: monitorPingTimeout}
+
 // newSSRFSafeHTTPClient 返回一个使用 safeDialContext 的 http.Client。
 // 仅供监控模块对外发起请求使用——所有目标都应是公网 endpoint。
 func newSSRFSafeHTTPClient(timeout time.Duration) *http.Client {
@@ -138,7 +143,7 @@ func pingEndpointOrigin(ctx context.Context, endpoint string) *int {
 		return nil
 	}
 	start := time.Now()
-	resp, err := monitorPingHTTPClient.Do(req)
+	resp, err := monitorPingClientForURL(origin).Do(req)
 	if err != nil {
 		return nil
 	}
@@ -477,7 +482,7 @@ func postRawJSON(ctx context.Context, fullURL string, payload []byte, headers ma
 		req.Header.Set(k, v)
 	}
 
-	resp, err := monitorHTTPClient.Do(req)
+	resp, err := monitorClientForURL(fullURL).Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("do request: %w", err)
 	}
@@ -488,6 +493,28 @@ func postRawJSON(ctx context.Context, fullURL string, payload []byte, headers ma
 		return nil, resp.StatusCode, fmt.Errorf("read body: %w", err)
 	}
 	return respBody, resp.StatusCode, nil
+}
+
+func monitorClientForURL(rawURL string) *http.Client {
+	if isLocalPlainHTTPMonitorURL(rawURL) {
+		return monitorLocalHTTPClient
+	}
+	return monitorHTTPClient
+}
+
+func monitorPingClientForURL(rawURL string) *http.Client {
+	if isLocalPlainHTTPMonitorURL(rawURL) {
+		return monitorLocalPingHTTPClient
+	}
+	return monitorPingHTTPClient
+}
+
+func isLocalPlainHTTPMonitorURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Scheme, "http") && isLocalChannelMonitorHost(u.Hostname())
 }
 
 // joinURL 把 base origin 与 path 拼成完整 URL。
