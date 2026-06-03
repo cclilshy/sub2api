@@ -33,6 +33,20 @@ docker buildx build \
 python3 override/update.py
 ```
 
+## 一次性调整用户 ID 自增数
+
+生产环境部署目录中执行（例如 `sub2api/`，包含 `docker-compose.local.yml` 的目录）：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/cclilshy/sub2api/refs/heads/override/main/override/deploy/adjust-user-id-sequence.sh \
+  | bash -s -- --next 10000 --dry-run
+
+curl -sSL https://raw.githubusercontent.com/cclilshy/sub2api/refs/heads/override/main/override/deploy/adjust-user-id-sequence.sh \
+  | bash -s -- --next 10000
+```
+
+脚本会通过 Docker Compose 进入 PostgreSQL 容器，锁定 `users` 表，并把真正的下一个自增 ID 调整为 `max(MAX(users.id)+1, --next)`，避免指定值小于现有最大 ID 时产生冲突。
+
 ## 部署指令
 
 ```bash

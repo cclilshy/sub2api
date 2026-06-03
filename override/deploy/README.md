@@ -177,6 +177,12 @@ docker compose -f docker-compose.local.yml restart sub2api
 docker compose -f docker-compose.local.yml pull
 docker compose -f docker-compose.local.yml up -d
 
+# One-shot: adjust the next users.id value safely
+curl -sSL https://raw.githubusercontent.com/cclilshy/sub2api/refs/heads/override/main/override/deploy/adjust-user-id-sequence.sh \
+  | bash -s -- --next 10000 --dry-run
+curl -sSL https://raw.githubusercontent.com/cclilshy/sub2api/refs/heads/override/main/override/deploy/adjust-user-id-sequence.sh \
+  | bash -s -- --next 10000
+
 # Remove all data (caution!)
 docker compose -f docker-compose.local.yml down
 rm -rf data/ postgres_data/ redis_data/
@@ -200,6 +206,12 @@ docker compose restart sub2api
 # Update to latest version
 docker compose pull
 docker compose up -d
+
+# One-shot: adjust the next users.id value safely
+curl -sSL https://raw.githubusercontent.com/cclilshy/sub2api/refs/heads/override/main/override/deploy/adjust-user-id-sequence.sh \
+  | bash -s -- --next 10000 --dry-run
+curl -sSL https://raw.githubusercontent.com/cclilshy/sub2api/refs/heads/override/main/override/deploy/adjust-user-id-sequence.sh \
+  | bash -s -- --next 10000
 
 # Remove all data (caution!)
 docker compose down -v
